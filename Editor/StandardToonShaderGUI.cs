@@ -309,6 +309,14 @@ class StandardToonShaderGUI : ShaderGUI
 			material.SetFloat( "_EdgeThickness", edgeThickness );
 			material.SetFloat( "_EdgeOffsetFactor", edgeOffset.x );
 			material.SetFloat( "_EdgeOffsetUnits", edgeOffset.y );
+			if( edgeColor.a >= 1.0f - float.Epsilon ) {
+				material.SetInt("_EdgeSrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+				material.SetInt("_EdgeDstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+			} else {
+				material.SetInt("_EdgeSrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+				material.SetInt("_EdgeDstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+			}
+
 			EditorUtility.SetDirty( material );
 		}
 	}

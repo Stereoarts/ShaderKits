@@ -17,6 +17,8 @@ Shader "ShaderKits/Standard Toon NoShadowCasting DoubleSided Edge"
 		_EdgeThickness("EdgeColor", Float) = 0.01
 		_EdgeOffsetFactor("_EdgeOffsetFactor", Float) = 1.0
 		_EdgeOffsetUnits("_EdgeOffsetUnits", Float) = 1.0
+		[HideInInspector] _EdgeSrcBlend ("__src", Float) = 1.0
+		[HideInInspector] _EdgeDstBlend ("__dst", Float) = 0.0
 
 		_Cutoff("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
 
@@ -56,16 +58,447 @@ Shader "ShaderKits/Standard Toon NoShadowCasting DoubleSided Edge"
 	{
 		Tags { "RenderType"="Opaque" "PerformanceChecks"="False" "ForceNoShadowCasting"="True" }
 
-		UsePass "ShaderKits/Standard Toon DoubleSided/FORWARD"
-		UsePass "ShaderKits/Standard Toon DoubleSided/FORWARD2"
-		UsePass "ShaderKits/Standard Toon DoubleSided/FORWARD_DELTA"
-		UsePass "ShaderKits/Standard Toon DoubleSided/FORWARD_DELTA2"
-		UsePass "ShaderKits/Standard Toon/SHADOW_CASTER"
-		UsePass "ShaderKits/Standard Toon/DEFERRED"
-		UsePass "ShaderKits/Standard Toon/META"
+		// ------------------------------------------------------------------
+		//  Base forward pass (directional light, emission, lightmaps, ...)
+		Pass
+		{
+			Name "FORWARD" 
+			Tags { "LightMode" = "ForwardBase" }
 
-		UsePass "ShaderKits/Standard Toon Edge/FORWARD_EDGE"
-		UsePass "ShaderKits/Standard Toon Edge/FORWARD_DELTA_EDGE"
+			Blend [_SrcBlend] [_DstBlend]
+			ZWrite [_ZWrite]
+			Cull Front
+
+			CGPROGRAM
+			#pragma target 3.0
+			// TEMPORARY: GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers gles
+			
+			// -------------------------------------
+					
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP 
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+
+			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+
+			#pragma vertex vertBase
+			#pragma fragment fragBase
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Base forward pass (directional light, emission, lightmaps, ...)
+		Pass
+		{
+			Name "FORWARD2" 
+			Tags { "LightMode" = "ForwardBase" }
+
+			Blend [_SrcBlend] [_DstBlend]
+			ZWrite [_ZWrite]
+			Cull Back
+
+			CGPROGRAM
+			#pragma target 3.0
+			// TEMPORARY: GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers gles
+			
+			// -------------------------------------
+					
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP 
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+
+			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+
+			#pragma vertex vertBase
+			#pragma fragment fragBase
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Additive forward pass (one light per pass)
+		Pass
+		{
+			Name "FORWARD_DELTA"
+			Tags { "LightMode" = "ForwardAdd" }
+			Blend [_SrcBlend] One
+			Fog { Color (0,0,0,0) } // in additive pass fog should be black
+			ZWrite Off
+			ZTest LEqual
+			Cull Front
+
+			CGPROGRAM
+			#pragma target 3.0
+			// GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers gles
+
+			// -------------------------------------
+			
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+			
+			#pragma multi_compile_fwdadd_fullshadows
+			#pragma multi_compile_fog
+
+			#pragma vertex vertAdd
+			#pragma fragment fragAdd
+			#define UNITY_PASS_FORWARDADD
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Additive forward pass (one light per pass)
+		Pass
+		{
+			Name "FORWARD_DELTA2"
+			Tags { "LightMode" = "ForwardAdd" }
+			Blend [_SrcBlend] One
+			Fog { Color (0,0,0,0) } // in additive pass fog should be black
+			ZWrite Off
+			ZTest LEqual
+			Cull Back
+
+			CGPROGRAM
+			#pragma target 3.0
+			// GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers gles
+
+			// -------------------------------------
+			
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+			
+			#pragma multi_compile_fwdadd_fullshadows
+			#pragma multi_compile_fog
+
+			#pragma vertex vertAdd
+			#pragma fragment fragAdd
+			#define UNITY_PASS_FORWARDADD
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Shadow rendering pass
+		Pass {
+			Name "SHADOW_CASTER"
+			Tags { "LightMode" = "ShadowCaster" }
+			
+			ZWrite On ZTest LEqual
+			Cull Off
+
+			CGPROGRAM
+			#pragma target 3.0
+			// TEMPORARY: GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers gles
+			
+			// -------------------------------------
+
+
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma multi_compile_shadowcaster
+
+			#pragma vertex vertShadowCaster
+			#pragma fragment fragShadowCaster
+
+			#include "UnityStandardToonShadow.cginc"
+
+			ENDCG
+		}
+		// ------------------------------------------------------------------
+		//  Deferred pass
+		Pass
+		{
+			Name "DEFERRED"
+			Tags { "LightMode" = "Deferred" }
+
+			Cull Off
+
+			CGPROGRAM
+			#pragma target 3.0
+			// TEMPORARY: GLES2.0 temporarily disabled to prevent errors spam on devices without textureCubeLodEXT
+			#pragma exclude_renderers nomrt gles
+			
+
+			// -------------------------------------
+
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+
+			#pragma multi_compile ___ UNITY_HDR_ON
+			#pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
+			#pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+			#pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
+			
+			#pragma vertex vertToonDeferred
+			#pragma fragment fragToonDeferred
+
+			#include "UnityStandardToonCore.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		// Extracts information for lightmapping, GI (emission, albedo, ...)
+		// This pass it not used during regular rendering.
+		Pass
+		{
+			Name "META" 
+			Tags { "LightMode"="Meta" }
+
+			Cull Off
+
+			CGPROGRAM
+			#pragma vertex vert_meta
+			#pragma fragment frag_meta
+
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _BRDF_SPECULAR
+
+			#include "UnityStandardToonMeta.cginc"
+			ENDCG
+		}
+
+		UsePass "ShaderKits/Standard Edge/FORWARD"
+		UsePass "ShaderKits/Standard Edge/FORWARD_DELTA"
+	}
+
+	SubShader
+	{
+		Tags { "RenderType"="Opaque" "PerformanceChecks"="False" "ForceNoShadowCasting"="True" }
+		LOD 150
+
+		// ------------------------------------------------------------------
+		//  Base forward pass (directional light, emission, lightmaps, ...)
+		Pass
+		{
+			Name "FORWARD" 
+			Tags { "LightMode" = "ForwardBase" }
+
+			Blend [_SrcBlend] [_DstBlend]
+			ZWrite [_ZWrite]
+			Cull Front
+
+			CGPROGRAM
+			#pragma target 2.0
+			
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _EMISSION 
+			#pragma shader_feature _METALLICGLOSSMAP 
+			#pragma shader_feature ___ _DETAIL_MULX2
+			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+
+			#pragma skip_variants SHADOWS_SOFT DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+
+			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+
+			#pragma vertex vertBase
+			#pragma fragment fragBase
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Base forward pass (directional light, emission, lightmaps, ...)
+		Pass
+		{
+			Name "FORWARD2" 
+			Tags { "LightMode" = "ForwardBase" }
+
+			Blend [_SrcBlend] [_DstBlend]
+			ZWrite [_ZWrite]
+			Cull Back
+
+			CGPROGRAM
+			#pragma target 2.0
+			
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _EMISSION 
+			#pragma shader_feature _METALLICGLOSSMAP 
+			#pragma shader_feature ___ _DETAIL_MULX2
+			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+
+			#pragma skip_variants SHADOWS_SOFT DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+
+			#pragma multi_compile_fwdbase
+			#pragma multi_compile_fog
+
+			#pragma vertex vertBase
+			#pragma fragment fragBase
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Additive forward pass (one light per pass)
+		Pass
+		{
+			Name "FORWARD_DELTA"
+			Tags { "LightMode" = "ForwardAdd" }
+			Blend [_SrcBlend] One
+			Fog { Color (0,0,0,0) } // in additive pass fog should be black
+			ZWrite Off
+			ZTest LEqual
+			Cull Front
+			
+			CGPROGRAM
+			#pragma target 2.0
+
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+			#pragma skip_variants SHADOWS_SOFT
+			
+			#pragma multi_compile_fwdadd_fullshadows
+			#pragma multi_compile_fog
+			
+			#pragma vertex vertAdd
+			#pragma fragment fragAdd
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Additive forward pass (one light per pass)
+		Pass
+		{
+			Name "FORWARD_DELTA2"
+			Tags { "LightMode" = "ForwardAdd" }
+			Blend [_SrcBlend] One
+			Fog { Color (0,0,0,0) } // in additive pass fog should be black
+			ZWrite Off
+			ZTest LEqual
+			Cull Back
+			
+			CGPROGRAM
+			#pragma target 2.0
+
+			#pragma shader_feature _NORMALMAP
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			// SM2.0: NOT SUPPORTED shader_feature _PARALLAXMAP
+			#pragma shader_feature _BRDF_SPECULAR
+			#pragma shader_feature _ _TOON_COLOR _TOON_TEX
+			#pragma skip_variants SHADOWS_SOFT
+			
+			#pragma multi_compile_fwdadd_fullshadows
+			#pragma multi_compile_fog
+			
+			#pragma vertex vertAdd
+			#pragma fragment fragAdd
+			#define UNITY_PASS_FORWARDBASE
+			#include "UnityStandardToonCoreForward.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		//  Shadow rendering pass
+		Pass {
+			Name "SHADOW_CASTER"
+			Tags { "LightMode" = "ShadowCaster" }
+			
+			ZWrite On ZTest LEqual
+			Cull Off
+
+			CGPROGRAM
+			#pragma target 2.0
+
+			#pragma shader_feature _ _ALPHATEST_ON _ALPHABLEND_ON _ALPHAPREMULTIPLY_ON
+			#pragma skip_variants SHADOWS_SOFT
+			#pragma multi_compile_shadowcaster
+
+			#pragma vertex vertShadowCaster
+			#pragma fragment fragShadowCaster
+
+			#include "UnityStandardToonShadow.cginc"
+
+			ENDCG
+		}
+
+		// ------------------------------------------------------------------
+		// Extracts information for lightmapping, GI (emission, albedo, ...)
+		// This pass it not used during regular rendering.
+		Pass
+		{
+			Name "META" 
+			Tags { "LightMode"="Meta" }
+
+			Cull Off
+
+			CGPROGRAM
+			#pragma vertex vert_meta
+			#pragma fragment frag_meta
+
+			#pragma shader_feature _EMISSION
+			#pragma shader_feature _METALLICGLOSSMAP
+			#pragma shader_feature ___ _DETAIL_MULX2
+			#pragma shader_feature _BRDF_SPECULAR
+
+			#include "UnityStandardToonMeta.cginc"
+			ENDCG
+		}
+
+		UsePass "ShaderKits/Standard Edge/FORWARD"
+		UsePass "ShaderKits/Standard Edge/FORWARD_DELTA"
 	}
 
 	FallBack Off

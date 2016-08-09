@@ -17,6 +17,8 @@ Shader "ShaderKits/Standard Toon"
 		_EdgeThickness("EdgeThickness", Float) = 0.01
 		_EdgeOffsetFactor("EdgeOffsetFactor", Float) = 1.0
 		_EdgeOffsetUnits("EdgeOffsetUnits", Float) = 1.0
+		[HideInInspector] _EdgeSrcBlend ("__src", Float) = 1.0
+		[HideInInspector] _EdgeDstBlend ("__dst", Float) = 0.0
 
 		_Cutoff("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
 
@@ -56,7 +58,6 @@ Shader "ShaderKits/Standard Toon"
 	{
 		Tags { "RenderType"="Opaque" "PerformanceChecks"="False" }
 		LOD 300
-	
 
 		// ------------------------------------------------------------------
 		//  Base forward pass (directional light, emission, lightmaps, ...)

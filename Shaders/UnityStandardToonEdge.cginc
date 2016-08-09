@@ -27,14 +27,10 @@ VertexOutputForwardBase vertForwardBase (appdata_full v)
 }
 
 #define _EdgeLightRate		0.75
-#define _AmbientToDiffuse	(1.0 / 0.2)
 
 half4 fragForwardBase (VertexOutputForwardBase i) : SV_Target
 {
 	half3 diff = _LightColor0.rgb * LIGHT_ATTENUATION(i) * _EdgeLightRate;
-#ifdef _AMBIENT_TO_DIFFUSE
-	diff *= saturate(i.vlight * _AmbientToDiffuse);
-#endif
 	diff += i.vlight;
 
 	half4 edgeColor = _EdgeColor;
