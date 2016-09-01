@@ -80,7 +80,7 @@ class StandardToonShaderGUI : ShaderGUI
 	MaterialProperty detailNormalMapScale = null;
 	MaterialProperty detailNormalMap = null;
 	MaterialProperty uvSetSecondary = null;
-	MaterialProperty toonMode = null;
+	//MaterialProperty toonMode = null;
 
 	MaterialEditor m_MaterialEditor;
 	WorkflowMode m_WorkflowMode = WorkflowMode.Specular;

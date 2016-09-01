@@ -49,7 +49,13 @@ float4 frag_meta (v2f_meta i) : SV_Target
 	UnityMetaInput o;
 	UNITY_INITIALIZE_OUTPUT(UnityMetaInput, o);
 
-	o.Albedo = UnityLightmappingAlbedo (data.diffColor, data.specColor, data.oneMinusRoughness);
+	o.Albedo = UnityLightmappingAlbedo (data.diffColor, data.specColor,
+#if UNITY_VERSION < 550
+		data.oneMinusRoughness
+#else
+		data.smoothness
+#endif
+		);
 	o.Emission = Emission(i.uv.xy);
 
 	return UnityMetaFragment(o);

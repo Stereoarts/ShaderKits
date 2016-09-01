@@ -1,9 +1,17 @@
+// UNITY_SHADER_NO_UPGRADE
+
 #include "HLSLSupport.cginc"
 #include "UnityShaderVariables.cginc"
 
 #include "UnityCG.cginc"
 #include "Lighting.cginc"
 #include "AutoLight.cginc"
+
+#if UNITY_VERSION >= 540
+#define _UNITY_OBJECT_TO_WORLD	unity_ObjectToWorld
+#else
+#define _UNITY_OBJECT_TO_WORLD	_Object2World
+#endif
 
 half4 _EdgeColor;
 half _EdgeThickness;
@@ -20,7 +28,7 @@ VertexOutputForwardBase vertForwardBase (appdata_full v)
 	VertexOutputForwardBase o;
 	v.vertex.xyz += v.normal.xyz * _EdgeThickness;
 	o.pos = mul(UNITY_MATRIX_MVP, v.vertex);
-	float3 worldN = mul((float3x3)_Object2World, SCALED_NORMAL);
+	float3 worldN = mul((float3x3)_UNITY_OBJECT_TO_WORLD, SCALED_NORMAL);
 	o.vlight = ShadeSH9(float4(worldN, 1.0));
 	TRANSFER_VERTEX_TO_FRAGMENT(o);
 	return o;

@@ -10,7 +10,11 @@ VertexOutputBaseSimple vertToonForwardBaseSimple (VertexInput v)
 }
 half4 fragToonForwardBaseSimple (VertexOutputBaseSimple i) : SV_Target	// backward compatibility (this used to be the fragment entry function)
 {
-	return fragForwardBaseSimpleInternal(i);
+	return fragForwardBaseSimpleInternal(i); // Redirect to default.
+}
+half4 fragToonForwardBaseSimpleInternal(VertexOutputBaseSimple i) : SV_Target	// backward compatibility (this used to be the fragment entry function)
+{
+	return fragForwardBaseSimpleInternal(i); // Redirect to default.
 }
 
 VertexOutputForwardAddSimple vertToonForwardAddSimple (VertexInput v)
@@ -19,7 +23,12 @@ VertexOutputForwardAddSimple vertToonForwardAddSimple (VertexInput v)
 }
 half4 fragToonForwardAddSimple (VertexOutputForwardAddSimple i) : SV_Target	// backward compatibility (this used to be the fragment entry function)
 {
-	return fragForwardAddSimpleInternal(i);
+	return fragForwardAddSimpleInternal(i); // Redirect to default.
+}
+
+half4 fragToonForwardAddSimpleInternal(VertexOutputForwardAddSimple i) : SV_Target
+{
+	return fragForwardAddSimpleInternal(i); // Redirect to default.
 }
 
 #endif // UNITY_STANDARD_TOON_CORE_FORWARD_SIMPLE_INCLUDED

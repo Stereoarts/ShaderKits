@@ -37,6 +37,34 @@ half _ToonCen;
 
 //-------------------------------------------------------------------------------------
 
+inline void _TOON_BRDF_NdotL(half3 normal, UnityLight light, out half ndotl, out half ndotl_uc)
+{
+	ndotl_uc = dot(normal, light.dir);
+	ndotl = saturate(ndotl_uc);
+}
+
+inline void TOON_BRDF_NdotL(half3 normal, UnityLight light, out half ndotl, out half ndotl_uc)
+{
+	ndotl_uc = dot(normal, light.dir);
+#if UNITY_VERSION >= 550
+	ndotl = saturate(ndotl_uc);
+#else
+	ndotl = light.ndotl;
+#endif
+}
+
+inline void TOON_BRDF_NdotL(half3 normal, UnityLight light, out half ndotl)
+{
+#if UNITY_VERSION >= 550
+	half ndotl_uc = dot(normal, light.dir);
+	ndotl = saturate(ndotl_uc);
+#else
+	ndotl = light.ndotl;
+#endif
+}
+
+//-------------------------------------------------------------------------------------
+
 inline half TOON_GetToolRefl(half nl)
 {
 	return nl * 0.5 + 0.5;
@@ -103,11 +131,23 @@ VertexOutputForwardBase vertToonForwardBase (VertexInput v)
 //  b) GGX
 // * Smith for Visiblity term
 // * Schlick approximation for Fresnel
-half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity, half oneMinusRoughness,
+half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity,
+#if UNITY_VERSION < 550
+	half oneMinusRoughness,
+#else
+	half smoothness,
+#endif
 	half3 normal, half3 viewDir,
 	UnityLight light, UnityIndirect gi, half shadowAtten)
 {
-	half roughness = 1 - oneMinusRoughness;
+#if UNITY_VERSION < 550
+	half roughness = 1.0 - oneMinusRoughness;
+	half specularPower = RoughnessToSpecPower(roughness);
+#else
+	half perceptualRoughness = SmoothnessToPerceptualRoughness(smoothness);
+	half roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+	half specularPower = PerceptualRoughnessToSpecPower(perceptualRoughness);
+#endif
 	half3 halfDir = Unity_SafeNormalize(light.dir + viewDir);
 
 	// NdotV should not be negative for visible pixels, but it can happen due to perspective projection and normal mapping
@@ -118,6 +158,7 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	// Edit: Disable this code by default for now as it is not compatible with two sided lighting used in SpeedTree.
 #define UNITY_HANDLE_CORRECTLY_NEGATIVE_NDOTV 0 
 
+	half nl, nl_uc;
 #if UNITY_HANDLE_CORRECTLY_NEGATIVE_NDOTV
 	// The amount we shift the normal toward the view vector is defined by the dot product.
 	// This correction is only applied with SmithJoint visibility function because artifacts are more visible in this case due to highlight edge of rough surface
@@ -129,9 +170,11 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	// As we have modify the normal we need to recalculate the dot product nl. 
 	// Note that  light.ndotl is a clamped cosine and only the ForwardSimple mode use a specific ndotL with BRDF3
 	half nl = DotClamped(normal, light.dir);
+	_TOON_BRDF_NdotL(normal, light, nl, nl_uc);
 #else
-	half nl = light.ndotl;
+	TOON_BRDF_NdotL(normal, light, nl, nl_uc);
 #endif
+
 	half nh = BlinnTerm(normal, halfDir);
 	half nv = DotClamped(normal, viewDir);
 
@@ -148,7 +191,11 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 
 	half nlPow5 = Pow5(1 - nl);
 	half nvPow5 = Pow5(1 - nv);
+#if UNITY_VERSION < 550
 	half Fd90 = 0.5 + 2 * lh * lh * roughness;
+#else
+	half Fd90 = 0.5 + 2 * lh * lh * perceptualRoughness;
+#endif
 	half disneyDiffuse = (1 + (Fd90 - 1) * nlPow5) * (1 + (Fd90 - 1) * nvPow5);
 
 	// HACK: theoretically we should divide by Pi diffuseTerm and not multiply specularTerm!
@@ -161,7 +208,7 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	specularTerm = max(0, specularTerm * nl);
 
 #ifdef _TOON
-	half toonNdotL = clamp(dot(normal, light.dir) * disneyDiffuse, -1.0, 1.0);
+	half toonNdotL = clamp(nl_uc * disneyDiffuse, -1.0, 1.0);
 #ifdef UNITY_PASS_FORWARDADD
 	half toonRefl = TOON_GetToolRefl(toonNdotL);
 	half toonShadow = TOON_GetToonShadow(toonRefl);
@@ -173,13 +220,24 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	half3 diffuseTerm = disneyDiffuse * nl; // Warning: half to half3
 #endif // _TOON
 
+#if UNITY_VERSION < 550
 	// surfaceReduction = Int D(NdotH) * NdotH * Id(NdotL>0) dH = 1/(realRoughness^2+1)
 	half realRoughness = roughness*roughness;		// need to square perceptual roughness
 	half surfaceReduction;
 	if (IsGammaSpace()) surfaceReduction = 1.0 - 0.28*realRoughness*roughness;		// 1-0.28*x^3 as approximation for (1/(x^4+1))^(1/2.2) on the domain [0;1]
 	else surfaceReduction = 1.0 / (realRoughness*realRoughness + 1.0);			// fade \in [0.5;1]
+#else
+	// surfaceReduction = Int D(NdotH) * NdotH * Id(NdotL>0) dH = 1/(roughness^2+1)
+	half surfaceReduction;
+	if (IsGammaSpace()) surfaceReduction = 1.0 - 0.28*roughness*perceptualRoughness;		// 1-0.28*x^3 as approximation for (1/(x^4+1))^(1/2.2) on the domain [0;1]
+	else surfaceReduction = 1.0 / (roughness*roughness + 1.0);			// fade \in [0.5;1]
+#endif
 
+#if UNITY_VERSION < 550
 	half grazingTerm = saturate(oneMinusRoughness + (1 - oneMinusReflectivity));
+#else
+	half grazingTerm = saturate(smoothness + (1 - oneMinusReflectivity));
+#endif
 	half3 color = diffColor * (gi.diffuse + light.color * diffuseTerm)
 		+ specularTerm * light.color * FresnelTerm(specColor, lh)
 		+ surfaceReduction * gi.specular * FresnelLerp(specColor, grazingTerm, nv);
@@ -206,19 +264,31 @@ half4 BRDF1_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 // * BlinnPhong as NDF
 // * Modified Kelemen and Szirmay-​Kalos for Visibility term
 // * Fresnel approximated with 1/LdotH
-half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity, half oneMinusRoughness,
+half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity,
+#if UNITY_VERSION < 550
+	half oneMinusRoughness,
+#else
+	half smoothness,
+#endif
 	half3 normal, half3 viewDir,
 	UnityLight light, UnityIndirect gi, half shadowAtten)
 {
 	half3 halfDir = Unity_SafeNormalize(light.dir + viewDir);
 
-	half nl = light.ndotl;
+	half nl, nl_uc;
+	TOON_BRDF_NdotL(normal, light, nl, nl_uc);
 	half nh = BlinnTerm(normal, halfDir);
 	half nv = DotClamped(normal, viewDir);
 	half lh = DotClamped(light.dir, halfDir);
 
-	half roughness = 1 - oneMinusRoughness;
+#if UNITY_VERSION < 550
+	half roughness = 1.0 - oneMinusRoughness;
 	half specularPower = RoughnessToSpecPower(roughness);
+#else
+	half perceptualRoughness = SmoothnessToPerceptualRoughness(smoothness);
+	half specularPower = PerceptualRoughnessToSpecPower(perceptualRoughness);
+	half roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+#endif
 	// Modified with approximate Visibility function that takes roughness into account
 	// Original ((n+1)*N.H^n) / (8*Pi * L.H^3) didn't take into account roughness 
 	// and produced extremely bright specular at grazing angles
@@ -228,18 +298,29 @@ half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	// and 2) on engine side "Non-important" lights have to be divided by Pi to in cases when they are injected into ambient SH
 	// NOTE: multiplication by Pi is cancelled with Pi in denominator
 
+#if UNITY_VERSION < 550
 	half invV = lh * lh * oneMinusRoughness + roughness * roughness; // approx ModifiedKelemenVisibilityTerm(lh, 1-oneMinusRoughness);
+#else
+	half invV = lh * lh * smoothness + perceptualRoughness * perceptualRoughness; // approx ModifiedKelemenVisibilityTerm(lh, perceptualRoughness);
+#endif
 	half invF = lh;
 	half specular = ((specularPower + 1) * pow(nh, specularPower)) / (8 * invV * invF + 1e-4h);
 	if (IsGammaSpace())
 		specular = sqrt(max(1e-4h, specular));
 
+#if UNITY_VERSION < 550
 	// surfaceReduction = Int D(NdotH) * NdotH * Id(NdotL>0) dH = 1/(realRoughness^2+1)
 	half realRoughness = roughness*roughness;		// need to square perceptual roughness
 													// 1-0.28*x^3 as approximation for (1/(x^4+1))^(1/2.2) on the domain [0;1]
 													// 1-x^3*(0.6-0.08*x)   approximation for 1/(x^4+1)
 	half surfaceReduction = IsGammaSpace() ? 0.28 : (0.6 - 0.08*roughness);
 	surfaceReduction = 1.0 - realRoughness*roughness*surfaceReduction;
+#else
+	// 1-0.28*x^3 as approximation for (1/(x^4+1))^(1/2.2) on the domain [0;1]
+	// 1-x^3*(0.6-0.08*x)   approximation for 1/(x^4+1)
+	half surfaceReduction = IsGammaSpace() ? 0.28 : (0.6 - 0.08*perceptualRoughness);
+	surfaceReduction = 1.0 - roughness*perceptualRoughness*surfaceReduction;
+#endif
 
 	// Prevent FP16 overflow on mobiles
 #if SHADER_API_GLES || SHADER_API_GLES3
@@ -248,7 +329,7 @@ half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 
 	half3 specLight = light.color * nl;
 #ifdef _TOON
-	half3 toonNdotL = dot(normal, light.dir);
+	half3 toonNdotL = nl_uc;
 #ifdef UNITY_PASS_FORWARDADD
 	half toonRefl = TOON_GetToolRefl(toonNdotL);
 	half toonShadow = TOON_GetToonShadow(toonRefl);
@@ -266,7 +347,11 @@ half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 
 #ifdef UNITY_PASS_FORWARDADD
 #else // UNITY_PASS_FORWARDADD
+#if UNITY_VERSION < 550
 	half grazingTerm = saturate(oneMinusRoughness + (1 - oneMinusReflectivity));
+#else
+	half grazingTerm = saturate(smoothness + (1 - oneMinusReflectivity));
+#endif
 	color += surfaceReduction * gi.specular * FresnelLerpFast(specColor, grazingTerm, nv);
 #endif // UNITY_PASS_FORWARDADD
 
@@ -286,11 +371,11 @@ half4 BRDF2_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	return half4(color, 1);
 }
 
-half3 TOON_BRDF3_Specular(half3 specColor, half rlPow4, half oneMinusRoughness)
+half3 TOON_BRDF3_Specular(half3 specColor, half rlPow4, half roughness)
 {
 	half LUT_RANGE = 16.0; // must match range in NHxRoughness() function in GeneratedTextures.cpp
 						   // Lookup texture to save instructions
-	half specular = tex2D(unity_NHxRoughness, half2(rlPow4, 1 - oneMinusRoughness)).UNITY_ATTEN_CHANNEL * LUT_RANGE;
+	half specular = tex2D(unity_NHxRoughness, half2(rlPow4, roughness)).UNITY_ATTEN_CHANNEL * LUT_RANGE;
 	return specular * specColor;
 }
 
@@ -302,13 +387,19 @@ half3 TOON_BRDF3_Specular(half3 specColor, half rlPow4, half oneMinusRoughness)
 // * No Fresnel term
 //
 // TODO: specular is too weak in Linear rendering mode
-half4 BRDF3_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity, half oneMinusRoughness,
+half4 BRDF3_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflectivity,
+#if UNITY_VERSION < 550
+	half oneMinusRoughness,
+#else
+	half smoothness,
+#endif
 	half3 normal, half3 viewDir,
 	UnityLight light, UnityIndirect gi, half shadowAtten)
 {
 	half3 reflDir = reflect(viewDir, normal);
 
-	half nl = light.ndotl;
+	half nl, nl_uc;
+	TOON_BRDF_NdotL(normal, light, nl, nl_uc);
 	half nv = DotClamped(normal, viewDir);
 
 	// Vectorize Pow4 to save instructions
@@ -317,10 +408,14 @@ half4 BRDF3_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 	half fresnelTerm = rlPow4AndFresnelTerm.y;
 
 	half3 diffDirect = diffColor;
-	half3 specDirect = TOON_BRDF3_Specular(specColor, rlPow4, oneMinusRoughness);
+#if UNITY_VERSION < 550
+	half3 specDirect = TOON_BRDF3_Specular(specColor, rlPow4, 1.0 - oneMinusRoughness);
+#else
+	half3 specDirect = TOON_BRDF3_Specular(specColor, rlPow4, SmoothnessToPerceptualRoughness(smoothness));
+#endif
 
 #ifdef _TOON
-	half3 toonNdotL = dot(normal, light.dir);
+	half3 toonNdotL = nl_uc;
 #ifdef UNITY_PASS_FORWARDADD
 	half toonRefl = TOON_GetToolRefl(toonNdotL);
 	half toonShadow = TOON_GetToonShadow(toonRefl);
@@ -335,7 +430,11 @@ half4 BRDF3_Unity_Toon_PBS(half3 diffColor, half3 specColor, half oneMinusReflec
 
 #ifdef UNITY_PASS_FORWARDADD
 #else // UNITY_PASS_FORWARDADD
-	half grazingTerm = saturate(oneMinusRoughness + (1 - oneMinusReflectivity));
+#if UNITY_VERSION < 550
+	half grazingTerm = saturate(oneMinusRoughness + (1.0 - oneMinusReflectivity));
+#else
+	half grazingTerm = saturate(smoothness + (1.0 - oneMinusReflectivity));
+#endif
 	color += BRDF3_Indirect(diffColor, specColor, gi, grazingTerm, fresnelTerm);
 #endif // UNITY_PASS_FORWARDADD
 
@@ -363,20 +462,36 @@ half4 fragToonForwardBaseInternal(VertexOutputForwardBase i)
 	s.reflUVW = i.reflUVW;
 #endif
 
+#if UNITY_VERSION < 550
 	UnityLight mainLight = MainLight(s.normalWorld);
+#else
+	UnityLight mainLight = MainLight();
+#endif
 	half shadowAtten = SHADOW_ATTENUATION(i);
 
 	half occlusion = Occlusion(i.tex.xy);
 	UnityGI gi = FragmentGI(s, occlusion, i.ambientOrLightmapUV, shadowAtten, mainLight);
 
-	half4 c = UNITY_TOON_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec,
+	half4 c = UNITY_TOON_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity,
+#if UNITY_VERSION < 550
+		s.oneMinusRoughness,
+#else
+		s.smoothness,
+#endif
+		s.normalWorld, -s.eyeVec,
 #ifdef _TOON
 		mainLight,
 #else
 		gi.light,
 #endif
 		gi.indirect, shadowAtten);
-	c.rgb += UNITY_BRDF_GI(s.diffColor, s.specColor, s.oneMinusReflectivity, s.oneMinusRoughness, s.normalWorld, -s.eyeVec, occlusion, gi);
+	c.rgb += UNITY_BRDF_GI(s.diffColor, s.specColor, s.oneMinusReflectivity,
+#if UNITY_VERSION < 550
+		s.oneMinusRoughness,
+#else
+		s.smoothness,
+#endif
+		s.normalWorld, -s.eyeVec, occlusion, gi);
 
 	UNITY_APPLY_FOG(i.fogCoord, c.rgb);
 	return OutputForward(c, s.alpha);
@@ -394,7 +509,26 @@ VertexOutputForwardAdd vertToonForwardAdd (VertexInput v)
 
 half4 fragToonForwardAddInternal (VertexOutputForwardAdd i)
 {
-	return fragForwardAddInternal(i); // Redirect to default.
+	FRAGMENT_SETUP_FWDADD(s) // clip() into FragmentSetup()
+
+	UnityLight light = AdditiveLight (
+#if UNITY_VERSION < 550
+		s.normalWorld,
+#endif
+		IN_LIGHTDIR_FWDADD(i), LIGHT_ATTENUATION(i));
+
+	UnityIndirect noIndirect = ZeroIndirect ();
+
+	half4 c = UNITY_TOON_BRDF_PBS(s.diffColor, s.specColor, s.oneMinusReflectivity,
+#if UNITY_VERSION < 550
+		s.oneMinusRoughness,
+#else
+		s.smoothness,
+#endif
+		s.normalWorld, -s.eyeVec, light, noIndirect, 0.0);
+
+	UNITY_APPLY_FOG_COLOR(i.fogCoord, c.rgb, half4(0,0,0,0)); // fog towards black in additive pass
+	return OutputForward (c, s.alpha);
 }
 
 half4 fragToonForwardAdd(VertexOutputForwardAdd i) : SV_Target		// backward compatibility (this used to be the fragment entry function)
