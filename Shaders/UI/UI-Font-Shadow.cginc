@@ -1,6 +1,4 @@
 #include "UnityCG.cginc"
-// Upgrade NOTE: excluded shader from DX11 and Xbox360; has structs without semantics (struct v2f members shadowLength)
-#pragma exclude_renderers d3d11 xbox360
 #include "UnityUI.cginc"
 
 struct appdata_t
