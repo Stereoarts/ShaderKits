@@ -90,12 +90,13 @@ inline float _GetShadowAlpha(v2f IN)
 			uvgrab.xy += pos * pixelToUV;
 			float alpha = tex2Dproj(_GrabTexture, UNITY_PROJ_COORD(uvgrab)).a;
 			alpha *= (lengthRange - length(pos)) * lengthRangeInv;
-			alpha = 1.0 - alpha;
-			alpha *= alpha;
-			alpha = 1.0 - alpha;
 			shadowAlpha = max(shadowAlpha, alpha);
 		}
 	}
+
+	shadowAlpha = 1.0 - shadowAlpha;
+	shadowAlpha *= shadowAlpha;
+	shadowAlpha = 1.0 - shadowAlpha;
 
 	return shadowAlpha;
 }
